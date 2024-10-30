@@ -40,7 +40,7 @@ app.post("/dashboard", async (req, res)=>{
         const { rows } = await db.query(query, values)
 
         if (rows.length === 0) {
-            res.sendFile(__dirname + "/failLog.html")
+            res.sendFile(_dirname + "/failLog.html")
         } else {
             res.send( `Hello ${userName}`)
         }
