@@ -3,10 +3,14 @@ import { dirname } from "path";
 import { fileURLToPath } from "url";
 import bodyParser from "body-parser";
 import pg from "pg";
-const _dirname = dirname(fileURLToPath(import.meta.url));
+import bcrypt from "bcrypt";
+import { hash } from "crypto";
+import { error } from "console";
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const app = express();
-const port = 4000
+const port = 4000;
+const saltRounds = 10;
 
 const db = new pg.Client({
     user: "postgres",
@@ -20,33 +24,52 @@ db.connect();
 app.use(bodyParser.urlencoded({ extended: true }))
 
 app.get('/', (req, res) => {
-    res.sendFile(_dirname + '/register.html');
+    res.sendFile(__dirname + '/login.html');
 });
 // dar opção na página register que é a home para fazer o login caso já tenha conta, ou o inverso é melhor?
 // colocar os cookies
 
-app.get("/login", (req, res)=>{
-    res.sendFile(_dirname + "/login.html");
+app.get("/login", (req, res) => {
+    res.sendFile(__dirname + "/login.html");
 });
 
-app.post("/dashboard", async (req, res)=>{
-    var userName = req.body.userName;
-    var password = req.body.password; 
+app.get("/register", (req, res) => {
+    res.sendFile(__dirname + "/register.html");
+});
 
-    const query = "SELECT * FROM public.users WHERE username = $1 AND password = $2"
-    const values = [userName, password]
+app.post("/dashboard", async (req, res) => { 
+    var userName = req.body.userName;
+    var password = req.body.password;
+
+    const query = "SELECT * FROM public.users WHERE username = $1"
+    const values = [userName]
     try {
 
         const { rows } = await db.query(query, values)
+        
+        if (rows.length > 0) {
+            const user = rows[0]
+            const storedHashedPassword = user.password;
 
-        if (rows.length === 0) {
-            res.sendFile(_dirname + "/failLog.html")
-        } else {
-            res.send( `Hello ${userName}`)
-        }
-        
+            bcrypt.compare(password, storedHashedPassword, (err, result) => {
+                if (err) {
+                    console.log("Error comparing passwords:", err);
+                    return res.status(500).send("Internal server error")
+                } else {
+                    if (result) {
+                        res.send(`Hello ${userName}`)
+                    } else {
+                        res.sendFile(__dirname + "/failLog.html")
+                    }   
+                }
+            })
+
+        } else { res.sendFile(__dirname + "/failLog.html") }
+
+
     } catch (error) {
-        
+        console.log(error);
+        return res.status(500).send("Internal server error")
     }
 });
 
@@ -63,19 +86,24 @@ app.post("/register", async (req, res) => {
     try {
 
         const { rows } = await db.query(query, values);
-        
-        
+
+
         if (rows.length > 0) {
 
-            res.sendFile(_dirname + '/failReg.html');
+            res.sendFile(__dirname + '/failReg.html');
         } else {
-            // colocar hashing no password******************************
+            bcrypt.hash(password, saltRounds, async (err, hash) => {
+                if (err) {  
+                    console.log("Error hashing password:", err);
+                    
+                } else {
+                const result = await db.query("INSERT INTO public.users (firstname, lastname, username, password, reg_date) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)", [firstName, lastName, userName, hash]);
+                }
+            })
 
-            const result = await db.query("INSERT INTO public.users (firstname, lastname, username, password, reg_date) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)", [firstName, lastName, userName, password]);
-            
         }
-            res.sendFile(_dirname + '/login.html');
-            
+        res.sendFile(__dirname + '/login.html');
+
     } catch (error) {
 
         console.log(error);
